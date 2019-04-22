@@ -1,13 +1,24 @@
 'use strict';
 const BaseRequest = require('./BaseRequest');
+const http = require('http');
 const log = require('./Logger');
 
 class Notify extends BaseRequest {
     constructor(options) {
+        if (!config.notifier || !config.notifier.url) {
+            log.error('notify config error, missing base url');
+        }
+        const keepAliveAgent = new http.Agent({
+            keepAlive: true,
+            keepAliveMsecs: parseInt(config.http_pool.keep_alive_msecs),
+            maxSockets: parseInt(config.http_pool.pool_size)
+        });
+        options.baseUrl = config.notifier.url;
+        options.agent = keepAliveAgent;
         super(options);
     }
 
-    async notifyCapture(capture, camera) {
+    async capture(capture, camera) {
         let channels = ['capture',`capture/camera/${camera.id}`];
         if (camera.user_group_id) {
             channels.push(`capture/group/${camera.user_group_id}`);
@@ -17,7 +28,7 @@ class Notify extends BaseRequest {
         return this.resultHandler(res, 'capture', info);
     }
 
-    async notifyAlarm(alarm, camera) {
+    async alarm(alarm, camera) {
         let channels = ['alarm', `alarm/camera/${camera.id}`];
         if (camera.user_group_id) {
             channels.push(`alarm/group/${camera.user_group_id}`);
@@ -27,7 +38,7 @@ class Notify extends BaseRequest {
         return this.resultHandler(res, 'alarm', info);
     }
     
-    async notifyCameraStatus(status, camera) {
+    async cameraStatus(status, camera) {
         let channels = ['camera_status', `camera_status/${camera.id}`];
         const info = {channel: channels, status: status};
         const res = await this.post(channels.join('|'), {operation_status: status});
@@ -45,4 +56,4 @@ class Notify extends BaseRequest {
     }
 }
 
-module.exports = Notify;
+module.exports = new Notify();

@@ -103,7 +103,20 @@ function __appendZero__(num, guarantee = 2) {
     return `0${num}`.slice(-guarantee);
 }
 
+/**
+ * dump json as string
+ * @param {object} json 
+ */
+function json2query(json = {}) {
+    let querys = [];
+    for(let k in json) {
+        querys.push(k + '=' + encodeURIComponent(json[k]));
+    }
+    return querys.join('&');
+}
+
 module.exports = {
   parseCameraUrl: parseCameraUrl,
-  formatTime: formatTime  
+  formatTime: formatTime,
+  json2query: json2query
 };

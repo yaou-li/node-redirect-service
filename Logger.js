@@ -20,11 +20,6 @@ class Logger {
         this.level = LEVELS[logLevel];
     }
 
-    formatCameraInfo(camera) {
-        let camera = camera || {id:'',src:'',capture_src:''};
-        return `camera<${camera.id}|${camera.src}|${camera.capture_src}>`;
-    }
-
     debug(...args) {
         return this.__print__('log', ...args);
     }
@@ -58,7 +53,6 @@ class Logger {
 
 const logger = new Logger({logLevel: config.log_level});
 module.exports = {
-    formatCameraInfo: logger.formatCameraInfo,
     debug: logger.debug,
     info: logger.info,
     warn: logger.warn,

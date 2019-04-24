@@ -1,22 +1,6 @@
 'use strict';
 
 /**
- * 把src中的用户名与密码做一次urlencode，防止有些密码带有特殊字符
- * @param {String} src 
- */
-function parseCameraUrl(src) {
-    try{
-        let r = parseUrl(src);
-        if( r.password ){
-            return src.replace(`:${r.password}@`, `:${encodeURIComponent(r.password)}@`);
-        }
-    } catch(e){
-        throw new Error("parseCameraUrl error", {src:src, error: e});
-    }
-    return src;
-}
-
-/**
  * parse the given url
  * reason for not using url lib in node.js:
  * it can not parse the username and password correctly when there is special character
@@ -110,13 +94,20 @@ function __appendZero__(num, guarantee = 2) {
 function json2query(json = {}) {
     let querys = [];
     for(let k in json) {
-        querys.push(k + '=' + encodeURIComponent(json[k]));
+        if (json[k]) {
+            querys.push(k + '=' + encodeURIComponent(json[k]));
+        }
     }
     return querys.join('&');
 }
 
+function isArray(obj){
+    return Object.prototype.toString.call(obj) == '[object Array]'
+}
+
 module.exports = {
-  parseCameraUrl: parseCameraUrl,
+  parseUrl: parseUrl,
   formatTime: formatTime,
-  json2query: json2query
+  json2query: json2query,
+  isArray: isArray
 };

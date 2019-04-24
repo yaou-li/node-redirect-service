@@ -17,5 +17,11 @@ module.exports =  {
         RECOGNIZE: 0,
         PASS: 1,
         MINORITY: 2
+    },
+    LEVELS: {
+        DEBUG: 0,
+        INFO: 1,
+        WARN: 2,
+        ERROR: 3
     }
 }

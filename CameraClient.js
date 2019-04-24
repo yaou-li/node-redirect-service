@@ -1,18 +1,17 @@
-'use strict';
-const http = require('http');
+// 'use strict';
 const iniparser = require('iniparser');
 const WebSocket = require('ws');
 
 const config = iniparser.parseSync('./config.ini');
-const util = require('util');
+const util = require('./util');
 const notify = require('./Notify');
 const log = require('./Logger');
 const cameraApi = require('./CameraApi');
-const redis = requre('redis');
-const { CAMERA_STATUS, CAMERA_TYPE, ALARM_TYPE } = require('./Constants');
+const redis = require('redis');
+const { CAMERA_STATUS, ALARM_TYPE } = require('./Constants');
 
 class CameraClient {
-    constructor(options) {
+    constructor(options = {}) {
         this.options = options || {};
         this.camera = options.camera || {};
         this.connTimeoutInt = options.connTimeoutInt || 20000;
@@ -20,19 +19,27 @@ class CameraClient {
         this.REDIS_CAPTURE_TOPIC = `PORTFACE_CAPTURE_${this.camera.id}`;
         this.REDIS_CAPTURE_RESPONSE_TOPIC = `PORTFACE_CAPTURE_RESPONSE_${this.camera.id}`;
         this.trackCaches = {};
+        this.run();
     }
 
     run() {
-        this.initRedis();
-        this.wsUrl = this.getWebSocketUrl(this.options.camera);
-        // set timeout checker for websocket connection
-        this.setConnTimer();
-        this.ws = new WebSocket(this.wsUrl);
-        this.ws.on('open', this.onOpen);
-        this.ws.on('message', this.onMessage);
-        this.ws.on('pong', this.onPong);
-        this.ws.on('error', this.onError);
-        this.ws.on('close', this.onClose);
+        try {
+            this.initRedis();
+            this.wsUrl = this.getWebSocketUrl(this.camera);
+            console.log(this.wsUrl);
+            // set timeout checker for websocket connection
+            this.setConnTimer();
+            log.info('[worker.websocket] connecting...', log.formatCamera(this.camera), this.wsUrl); 
+            this.ws = new WebSocket(this.wsUrl);
+            this.ws.on('open', this.onOpen.bind(this));
+            this.ws.on('message', this.onMessage.bind(this));
+            this.ws.on('pong', this.onPong.bind(this));
+            const onError = this.onError.bind(this);
+            this.ws.on('error', onError);
+            this.ws.on('close', this.onClose.bind(this));
+        } catch(exception) {
+            log.error(exception.message);
+        }
     }
 
     initRedis() {
@@ -76,14 +83,15 @@ class CameraClient {
     }
 
     getWebSocketUrl(camera) {
+        // console.log(camera);
         const deploy = camera.deploy_solution;
-        const wsOpts = {
+        let wsOpts = {
             ip: camera.core.ip,
             port: camera.core.port,
             path: `/${deploy.conf.interface || 'video_track'}`,
             params: {
                 interval: deploy.conf.interval || 10000,
-                url: encodeURIComponent(util.parseCameraUrl(camera.src)),
+                url: encodeURIComponent(this.parseCameraUrl(camera.src)),
                 roi: camera.roi,
                 limit: camera.configs.limit,
                 crop: deploy.conf.crop || 'face',
@@ -96,8 +104,9 @@ class CameraClient {
             }
         };
         if (deploy.conf.roll && deploy.conf.yaw && deploy.conf.pitch && deploy.conf.blurness) {
-            wsOpts.params.threshold = `${deploy.conf.roll},${deploy.conf.yaw},${deploy.conf.pitch},{deploy.conf.blurness}`;
+            wsOpts.params.threshold = `${deploy.conf.roll},${deploy.conf.yaw},${deploy.conf.pitch},${deploy.conf.blurness}`;
         }
+        
         // only alarm need below logic
         if (deploy.alarm_type == ALARM_TYPE.RECOGNIZE) {
             let groupIds = [];
@@ -115,13 +124,17 @@ class CameraClient {
             wsOpts.params.record_scoregap = deploy.conf.scoregap;
             wsOpts.params.alert = deploy.conf.minAlert;
         }
+        let query = [];
         
-        const query = util.json2query(wsOpts);
+        Object.keys(wsOpts.params).map((k) => {
+            if (wsOpts.params[k]) {
+                query.push(`${k}=${wsOpts.params[k]}`);
+            }
+        });
         if (deploy.conf.others) {
-            query = `${query}&${deploy.conf.others.split('\n')}`;
+            query = query.concat(deploy.conf.others.split('\n'));
         }
-        this.wsOpts = wsOpts;
-        return `ws://${wsOpts.ip}:${wsOpts.port}${wsOpts.path}?${query}`;
+        return `ws://${wsOpts.ip}:${wsOpts.port}${wsOpts.path}?${query.join('&')}`;
     }
 
     /**
@@ -172,7 +185,7 @@ class CameraClient {
         this.memoryKeeper = this.setMemoryKeeper();
         this.heartbeat = this.setHeartBeat();
 
-        log.info('[worker.websocket] connection open', this.formatCamera(camera), this.wsOpts, this.wsUrl);
+        log.info('[worker.websocket] connection open', log.formatCamera(this.camera), this.wsUrl);
         cameraApi.update(this.camera, {operation_status: CAMERA_STATUS.WORKING});
         notify.cameraStatus(CAMERA_STATUS.WORKING, this.camera);
     }
@@ -187,7 +200,7 @@ class CameraClient {
                     break;
                 case 'recognize':
                     delete data.frames;
-                    log.debug('[worker.websocket.message.faceResult]', this.formatCamera(this.camera), data.result, data);
+                    log.debug('[worker.websocket.message.faceResult]', log.formatCamera(this.camera), data.result, data);
                     if (this.needSave(data)) {
                         this.pubClient.pubClient.publish(this.REDIS_CAPTURE_TOPIC, JSON.stringify({
                             camera: this.camera,
@@ -198,29 +211,35 @@ class CameraClient {
                     }
                     break;
                 default:
-                    log.error("[worker.websocket.message]", this.formatCamera(this.camera), data, "other data type");
+                    log.error("[worker.websocket.message]", log.formatCamera(this.camera), data, "other data type");
             }
         } catch (e) {
-            log.error('[worker.websocket.message.exception]', this.formatCamera(this.camera), e);
+            log.error('[worker.websocket.message.exception]', log.formatCamera(this.camera), e);
         }
         
     }
 
     onError(e) {
-        if (this.connTimeout) {
-            clearTimeout(this.connTimeout);
+        try {
+            if (this.connTimeout) {
+                clearTimeout(this.connTimeout);
+            }
+            log.error(`[worker.websocket.error] camera = ${log.formatCamera(this.camera)}`, e);
+            log.error(`[worker.websocket.error] url=${this.wsUrl}`);
+            this.close(1001);
+            if ([CAMERA_STATUS.CAPTURE_ERROR, CAMERA_STATUS.ERROR].indexOf(this.camera.operation_status) < 0) {
+                cameraApi.update(this.camera, {operation_status: CAMERA_STATUS.CAPTURE_ERROR});
+                notify.cameraStatus(CAMERA_STATUS.CAPTURE_ERROR, this.camera);
+            }
+        } catch(e) {
+            console.log(e);
         }
-        log.error('[worker.websocket.error] camera=', this.formatCamera(this.camera), e);
-        log.error('[worker.websocket.error] url=', this.wsUrl);
-        this.close(1001);
-        if ([CAMERA_STATUS.CAPTURE_ERROR, CAMERA_STATUS.ERROR].indexOf(this.camera.operation_status) < 0) {
-            cameraApi.update(this.camera, {operation_status: CAMERA_STATUS.CAPTURE_ERROR});
-            notify.cameraStatus(CAMERA_STATUS.CAPTURE_ERROR, this.camera);
-        }
+            
+        
     }
 
     onClose(code) {
-        log.error('[worker.websocket.close]', this.formatCamera(this.camera), 'code=' + code, this.wsUrl);
+        log.error('[worker.websocket.close]', log.formatCamera(this.camera), 'code=' + code, this.wsUrl);
         if (code == 1000) {
             cameraApi.update(this.camera, {operation_status: CAMERA_STATUS.FREE});
             notify.cameraStatus(CAMERA_STATUS.FREE, this.camera);
@@ -256,14 +275,14 @@ class CameraClient {
             for(let trackId in this.trackCaches){
                 let track = this.trackCaches[trackId];
                 if( new Date - track.server_time > 10 * 60 * 1000 ){ // 如果某个track的时间超过了10分钟，则自动丢弃，且置为track消失
-                    log.debug("[worker.trackTimeout]", this.formatCamera(this.camera), {track_id: trackId});
+                    log.debug("[worker.trackTimeout]", log.formatCamera(this.camera), {track_id: trackId});
                     this.saveTrackGone({track: trackId});
                     delete this.trackCaches[trackId];
                 } else {
                     trackCount++;
                 }
             }
-            log.debug("[worker.trackCaches]", this.formatCamera(this.camera), {track_count: trackCount});
+            log.debug("[worker.trackCaches]", log.formatCamera(this.camera), {track_count: trackCount});
         }, this.memoryKeeperInt);
     }
 
@@ -286,6 +305,22 @@ class CameraClient {
         }, 30000);
     }
 
+    updateCamera(camera) {
+        this.camera = camera || {};
+    }
+
+    parseCameraUrl(src) {
+        try {
+            let r = util.parseUrl(src);
+            if( r.password ){
+                return src.replace(`:${r.password}@`, `:${encodeURIComponent(r.password)}@`);
+            }
+        } catch(e) {
+            log.error("parseCameraUrl error", {src:src, error: e});
+        }
+        return src;
+    }
+    
     close(code) {
         if (this.memoryKeeper) {
             clearInterval(this.memoryKeeper);
@@ -295,10 +330,7 @@ class CameraClient {
         log.info("quit redis sub");
         this.pubClient.quit();
         log.info("quit redis pub");
-    }
-
-    formatCamera(camera) {
-        let camera = camera || {id:'',src:'',capture_src:''};
-        return `camera<${camera.id}|${camera.src}|${camera.capture_src}>`;
-    }
+    }    
 }
+
+module.exports = CameraClient;

@@ -1,0 +1,29 @@
+{
+  "name": "camera-daemon-pk",
+  "version": "1.0.0",
+  "description": "revised version of camera daemon, using ES6 and classes",
+  "main": "main.js",
+  "dependencies": {
+    "console-error": "0.0.4",
+    "console-info": "0.0.5",
+    "console-warn": "0.0.4",
+    "iniparser": "^1.0.5",
+    "redis": "^2.8.0",
+    "request": "^2.88.0",
+    "ws": "^6.2.1"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yaou-li/camera-daemon-revise.git"
+  },
+  "author": "Yaou Li",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/yaou-li/camera-daemon-revise/issues"
+  },
+  "homepage": "https://github.com/yaou-li/camera-daemon-revise#readme"
+}

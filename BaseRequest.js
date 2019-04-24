@@ -7,7 +7,7 @@ class BaseRequest {
         this.baseUrl = options.baseUrl || '';
         this.timeout = options.timeout || 5000;
         this.maxRedirects = options.maxRedirects || 10;
-        this.agent = options.agent || {};
+        this.agent = options.agent;
         this.followAllRedirects = options.followAllRedirects || true;
     }
 
@@ -65,6 +65,9 @@ class BaseRequest {
 
         return new Promise((resolve) => {
             request(options, (err, res, body) => {
+                if (err) {
+                    console.error(err);
+                }
                 resolve({err: err, res: res, body: body});
             });
         });

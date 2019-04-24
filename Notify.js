@@ -1,10 +1,13 @@
 'use strict';
 const BaseRequest = require('./BaseRequest');
 const http = require('http');
+const iniparser = require('iniparser');
+
 const log = require('./Logger');
+const config = iniparser.parseSync('./config.ini');
 
 class Notify extends BaseRequest {
-    constructor(options) {
+    constructor(options = {}) {
         if (!config.notifier || !config.notifier.url) {
             log.error('notify config error, missing base url');
         }

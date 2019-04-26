@@ -1,5 +1,5 @@
 {
-  "name": "camera-daemon-pk",
+  "name": "camera-daemon",
   "version": "1.0.0",
   "description": "revised version of camera daemon, using ES6 and classes",
   "main": "main.js",
@@ -8,6 +8,7 @@
     "console-info": "0.0.5",
     "console-warn": "0.0.4",
     "iniparser": "^1.0.5",
+    "minimist": "^1.2.0",
     "redis": "^2.8.0",
     "request": "^2.88.0",
     "ws": "^6.2.1"

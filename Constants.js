@@ -23,5 +23,9 @@ module.exports =  {
         INFO: 1,
         WARN: 2,
         ERROR: 3
+    },
+    MOCKER_TYPE: {
+        CREATE: 1,
+        SEND: 2
     }
 }

@@ -19,14 +19,12 @@ class CameraClient {
         this.REDIS_CAPTURE_TOPIC = `PORTFACE_CAPTURE_${this.camera.id}`;
         this.REDIS_CAPTURE_RESPONSE_TOPIC = `PORTFACE_CAPTURE_RESPONSE_${this.camera.id}`;
         this.trackCaches = {};
-        this.run();
+        this.initRedis();
     }
 
     run() {
         try {
-            this.initRedis();
             this.wsUrl = this.getWebSocketUrl(this.camera);
-            console.log(this.wsUrl);
             // set timeout checker for websocket connection
             this.setConnTimer();
             log.info('[worker.websocket] connecting...', log.formatCamera(this.camera), this.wsUrl); 
@@ -34,8 +32,7 @@ class CameraClient {
             this.ws.on('open', this.onOpen.bind(this));
             this.ws.on('message', this.onMessage.bind(this));
             this.ws.on('pong', this.onPong.bind(this));
-            const onError = this.onError.bind(this);
-            this.ws.on('error', onError);
+            this.ws.on('error', this.onError.bind(this));
             this.ws.on('close', this.onClose.bind(this));
         } catch(exception) {
             log.error(exception.message);
@@ -165,12 +162,12 @@ class CameraClient {
     saveTrackGone(data) {
         let params = {};
         const trackId = data.track;
-        const track = this.trackCaches[track_id] || '';
+        const track = this.trackCaches[trackId] || '';
         if (track) {
             // 处理最好质量人脸的seq
             params.clip_id = track.clip_seq;
             params.track_id = trackId;
-            params.capture_id = capture_id || '';
+            params.capture_id = '';
             params.result = JSON.stringify(data);
             params.camera_id = this.camera.id;
             params.DATA_TYPE = 'FACE_GONE';
@@ -202,7 +199,7 @@ class CameraClient {
                     delete data.frames;
                     log.debug('[worker.websocket.message.faceResult]', log.formatCamera(this.camera), data.result, data);
                     if (this.needSave(data)) {
-                        this.pubClient.pubClient.publish(this.REDIS_CAPTURE_TOPIC, JSON.stringify({
+                        this.pubClient.publish(this.REDIS_CAPTURE_TOPIC, JSON.stringify({
                             camera: this.camera,
                             result: data,
                             core_id: this.camera.core.id,
@@ -214,7 +211,7 @@ class CameraClient {
                     log.error("[worker.websocket.message]", log.formatCamera(this.camera), data, "other data type");
             }
         } catch (e) {
-            log.error('[worker.websocket.message.exception]', log.formatCamera(this.camera), e);
+            log.error('[worker.websocket.message.exception]', log.formatCamera(this.camera), e.message);
         }
         
     }

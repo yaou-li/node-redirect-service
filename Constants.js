@@ -27,5 +27,9 @@ module.exports =  {
     MOCKER_TYPE: {
         CREATE: 1,
         SEND: 2
+    },
+    TRACK_TYPE: {
+        GONE: 'gone',
+        RECOG: 'recognize'
     }
 }

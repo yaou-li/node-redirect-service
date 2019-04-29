@@ -4,8 +4,9 @@ const path = require('path');
 const readline = require('readline');
 
 const CameraClient = require('./CameraClient');
+const groupApi = require('./GroupApi');
 const log = require('./Logger');
-const { MOCKER_TYPE } = require('./Constants');
+const { MOCKER_TYPE, TRACK_TYPE } = require('./Constants');
 
 class CameraMocker extends CameraClient {
     constructor(options) {
@@ -13,7 +14,7 @@ class CameraMocker extends CameraClient {
         this.type = options.type || MOCKER_TYPE.SEND;
         this.path = options.path || './data';
         this.interval = options.interval || 1000;
-        this.fps = options.fps || 2;
+        this.fps = options.fps || 30;
         this.trackInterval = options.trackInterval || 3000;
         this.tracks = {};
         this.queue = {};
@@ -56,10 +57,10 @@ class CameraMocker extends CameraClient {
         return this;
     }
 
-    async create (data) {
+    async create(data) {
         const filename = `${data.uuid}_${data.track}_${this.camera.id}.json`;
         const abs = path.resolve(this.path, filename)
-        if (['gone','recognize'].indexOf(data.type) > -1) {
+        if ([TRACK_TYPE.GONE, TRACK_TYPE.RECOG].indexOf(data.type) > -1) {
             fs.appendFileSync(abs, JSON.stringify(data));
             fs.appendFileSync(abs, '\n');
             log.info(`[${+new Date()}] mock data write to ${abs}`);
@@ -78,7 +79,7 @@ class CameraMocker extends CameraClient {
      */
     mock() {
         if (Object.keys(this.queue).length < this.fps) {
-            console.log('enqueueing', Object.keys(this.queue).length);
+            // console.log('enqueueing', Object.keys(this.queue).length);
             this.enqueue();
         }
         let randomInterval = parseInt(Math.random() * this.interval);
@@ -106,7 +107,7 @@ class CameraMocker extends CameraClient {
             this.send(num)
             return this;
         } catch (e) {
-            console.log(e.message);
+            log.error(e.message);
         }
         
     }
@@ -118,7 +119,7 @@ class CameraMocker extends CameraClient {
     unqueue(trackId) {
         clearInterval(this.queue[trackId].timeInterval);
         delete this.queue[trackId];
-        console.log('unqueue', Object.keys(this.queue).length, trackId);
+        // console.log('unqueue', Object.keys(this.queue).length, trackId);
     }
 
     send(num) {
@@ -131,7 +132,6 @@ class CameraMocker extends CameraClient {
                 next: 0,
             };
             this.sendOne(trackId);    
-            
             num--;
         }
     }
@@ -142,7 +142,7 @@ class CameraMocker extends CameraClient {
      */
     sendOne(trackId) {
         let next = this.queue[trackId].next || 0;
-        let data = this.updateCaptureTime(this.tracks[trackId]);
+        let data = this.tracks[trackId];
         super.onMessage(JSON.stringify(data[next]));
         this.queue[trackId].next = next + 1;
         //unqueue if already the last one.
@@ -164,26 +164,21 @@ class CameraMocker extends CameraClient {
         this.index = this.index >= trackIds.length ? 0 : this.index;
         const trackId = trackIds[this.index];
         const utime = +new Date();
-        //update track uuid so the portface will not ignore it
         this.tracks[trackId].map((data) => {
+            // update track uuid so the portface will not ignore it
             data.uuid = data.uuid + utime;
+            // update timestamp since we are using the old data
+            data.timestamp = +new Date;
         });
         this.index++;
         return trackId;
-    }
-
-    updateCaptureTime(data) {
-        if (data.timestamp) {
-            data.timestamp = +new Date;
-        }
-        return data;
     }
 
     /**
      * read test data from dir given
      * @param {object} dir 
      */
-    readFiles(dir) {
+    async readFiles(dir) {
         let files = fs.readdirSync(dir);
         let promises = [];
         files.map((file) => {
@@ -196,6 +191,7 @@ class CameraMocker extends CameraClient {
 
                 rl.on('line', (line) => {
                     let data = JSON.parse(line);
+                    this.randomAlarm(data);
                     this.tracks[data.uuid] = !this.tracks[data.uuid] ? [] : this.tracks[data.uuid];
                     this.tracks[data.uuid].push(data);
                 });
@@ -210,6 +206,23 @@ class CameraMocker extends CameraClient {
         return Promise.all(promises).then(() => {
             return true;
         });
+    }
+
+    async randomAlarm(data) {
+        let rand = Math.random() <= 0.5;
+        //if rand < 0.5 or data is not 'recognize'
+        if (rand || data.type !== TRACK_TYPE.RECOG) return this;
+        let groups = await groupApi.getSubjectsForEachGroup();
+        //if no groups or no subject in groups
+        if (groups.length <= 0) return this;
+
+        data.result = !data.result ? []: data.result;
+        let group = groups[parseInt(Math.random() * (groups.length - 1))];
+        data.result.push({
+            group: group.id,
+            photos: [group.subject]
+        });
+        return this;
     }
     
 }

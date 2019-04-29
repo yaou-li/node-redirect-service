@@ -3,7 +3,7 @@ const iniparser = require('iniparser');
 const WebSocket = require('ws');
 
 const config = iniparser.parseSync('./config.ini');
-const util = require('./util');
+const { parseUrl, isArray } = require('./util');
 const notify = require('./Notify');
 const log = require('./Logger');
 const cameraApi = require('./CameraApi');
@@ -62,7 +62,7 @@ class CameraClient {
                 notify.capture(res.capture, this.camera);
             }
             if (res.alarm) {
-                res.alarm = util.isArray(res.alarm) ? res.alarm : [res.alarm];
+                res.alarm = isArray(res.alarm) ? res.alarm : [res.alarm];
                 res.alarm.map((alarm) => {
                     notify.alarm(alarm, this.camera);
                 });
@@ -308,7 +308,7 @@ class CameraClient {
 
     parseCameraUrl(src) {
         try {
-            let r = util.parseUrl(src);
+            let r = parseUrl(src);
             if( r.password ){
                 return src.replace(`:${r.password}@`, `:${encodeURIComponent(r.password)}@`);
             }

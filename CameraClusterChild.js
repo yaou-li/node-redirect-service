@@ -32,11 +32,13 @@ class CameraClusterChild {
                 }
             });
         } else {
+            const fps = this.getFps();
             Object.keys(this.cameras).map((cameraId) => {
                 if (!this.cameraClients.hasOwnProperty(cameraId)) {
                     this.cameraClients[cameraId] = new CameraMocker({
                         camera: this.cameras[cameraId],
-                        type: MOCKER_TYPE[String.prototype.toUpperCase.call(mockerType)]
+                        type: MOCKER_TYPE[String.prototype.toUpperCase.call(mockerType)],
+                        fps: fps
                     });
                     this.cameraClients[cameraId].run();
                 }
@@ -87,10 +89,11 @@ class CameraClusterChild {
     }
 
     isMockMode() {
-        if (!args.hasOwnProperty('m')) {
-            return false;
-        }
-        return args['m'];
+        return args.hasOwnProperty('m') ? args['m'] : false;
+    }
+
+    getFps() {
+        return args.hasOwnProperty('f') ? parseInt(args['f']) : false
     }
     
 }
